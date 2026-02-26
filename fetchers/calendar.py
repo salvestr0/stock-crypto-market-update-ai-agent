@@ -7,26 +7,41 @@ from datetime import datetime, date
 FF_THIS_WEEK = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
 FF_NEXT_WEEK = "https://nfs.faireconomy.media/ff_calendar_nextweek.json"
 
-# Only surface USD events at these impact levels
 _WANTED_IMPACT  = {"High", "Medium"}
 _WANTED_COUNTRY = "USD"
 
+# UTC offset → timezone label (US economic data is always Eastern Time)
+_OFFSET_LABEL = {-5: "ET", -4: "ET", -6: "CT", -7: "MT", -8: "PT"}
 
-def _parse_ff_date(raw: str) -> date | None:
-    """Parse Forex Factory date strings — handles ISO 8601 with offset and bare dates."""
+
+def _parse_ff_event(raw: str) -> tuple[date | None, str | None, str | None]:
+    """Parse a FF date string. Returns (date, time_str, timezone_label).
+    Example input: '2026-02-27T08:30:00-05:00'
+    Example output: (date(2026,2,27), '8:30 AM', 'ET')
+    """
     raw = raw.strip()
-    # ISO 8601 with timezone offset: 2026-02-27T08:30:00-05:00
     try:
-        return datetime.fromisoformat(raw).date()
+        dt = datetime.fromisoformat(raw)
+        ev_date  = dt.date()
+        time_str = dt.strftime("%I:%M %p").lstrip("0") or "12:00 AM"  # strip leading zero
+
+        tz_label = None
+        if dt.utcoffset() is not None:
+            offset_h = int(dt.utcoffset().total_seconds() / 3600)
+            tz_label = _OFFSET_LABEL.get(offset_h, f"UTC{offset_h:+d}")
+
+        return ev_date, time_str, tz_label
     except ValueError:
         pass
-    # Fallback plain formats
+
+    # Fallback: bare date formats, no time
     for fmt in ("%Y-%m-%d", "%m-%d-%Y", "%b %d, %Y"):
         try:
-            return datetime.strptime(raw, fmt).date()
+            return datetime.strptime(raw, fmt).date(), None, None
         except ValueError:
             continue
-    return None
+
+    return None, None, None
 
 
 def _fetch_ff(url: str) -> list[dict]:
@@ -38,10 +53,10 @@ def _fetch_ff(url: str) -> list[dict]:
 def get_upcoming_events() -> list[dict]:
     """Return upcoming USD high/medium-impact events for this week and next.
 
-    Each event: {date, days_until, name, impact, forecast, previous}
+    Each event: {date, time, timezone, days_until, name, impact, forecast, previous}
     """
     today = datetime.now().date()
-    raw = []
+    raw   = []
 
     for url in (FF_THIS_WEEK, FF_NEXT_WEEK):
         try:
@@ -56,13 +71,15 @@ def get_upcoming_events() -> list[dict]:
         if ev.get("impact") not in _WANTED_IMPACT:
             continue
 
-        ev_date = _parse_ff_date(ev.get("date", ""))
+        ev_date, ev_time, ev_tz = _parse_ff_event(ev.get("date", ""))
         if ev_date is None or ev_date < today:
             continue
 
         days_until = (ev_date - today).days
         events.append({
             "date":       ev_date.isoformat(),
+            "time":       ev_time,      # e.g. "8:30 AM"
+            "timezone":   ev_tz,        # e.g. "ET"
             "days_until": days_until,
             "name":       ev.get("title", "Unknown"),
             "impact":     ev.get("impact", ""),
@@ -70,10 +87,9 @@ def get_upcoming_events() -> list[dict]:
             "previous":   ev.get("previous", ""),
         })
 
-    # Deduplicate same event on same date, sort by date
-    seen = set()
-    unique = []
-    for ev in sorted(events, key=lambda x: x["date"]):
+    # Deduplicate and sort
+    seen, unique = set(), []
+    for ev in sorted(events, key=lambda x: (x["date"], x["time"] or "")):
         key = (ev["date"], ev["name"])
         if key not in seen:
             seen.add(key)

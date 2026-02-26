@@ -6,6 +6,7 @@ import os
 import re
 import time
 import threading
+from collections import deque
 from datetime import datetime
 
 # Load env before any os.getenv calls
@@ -23,6 +24,20 @@ from chart import get_crypto_chart, get_stock_chart
 
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 UPDATE_TIME = os.getenv("DAILY_UPDATE_TIME", "07:00")
+
+# Per-chat conversation history — keeps last 10 messages (5 exchanges)
+_HISTORY: dict[str, deque] = {}
+_MAX_HISTORY = 10
+
+
+def _history_add(chat_id: str, role: str, content: str) -> None:
+    if chat_id not in _HISTORY:
+        _HISTORY[chat_id] = deque(maxlen=_MAX_HISTORY)
+    _HISTORY[chat_id].append({"role": role, "content": content})
+
+
+def _history_get(chat_id: str) -> list[dict]:
+    return list(_HISTORY.get(chat_id, []))
 
 
 # ---------------------------------------------------------------------------
@@ -215,12 +230,17 @@ def _handle_chart_request(chat_id: str, symbol: str, interval: str):
 # ---------------------------------------------------------------------------
 
 def _handle_ask(chat_id: str, question: str):
-    """Answer a freeform question using agent context."""
+    """Answer a freeform question using agent context and conversation history."""
     try:
-        soul = read_file("SOUL.md")
-        brain = read_file("BRAIN.md")
+        soul      = read_file("SOUL.md")
+        brain     = read_file("BRAIN.md")
         learnings = read_file("LEARNINGS.md")
-        answer = answer_question(question, soul, brain, learnings)
+        history   = _history_get(chat_id)
+
+        _history_add(chat_id, "user", question)
+        answer = answer_question(question, soul, brain, learnings, history)
+        _history_add(chat_id, "assistant", answer)
+
         send_reply(chat_id, answer)
     except Exception as e:
         send_reply(chat_id, f"⚠️ Error answering question: {e}")

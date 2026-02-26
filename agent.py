@@ -324,13 +324,13 @@ Produce a single review log entry in exactly this format (no extra commentary be
     return response.text
 
 
-def answer_question(question: str, soul: str, brain: str, learnings: str) -> str:
-    """Answer a freeform question using agent persona and current memory context."""
+def answer_question(question: str, soul: str, brain: str, learnings: str,
+                    history: list[dict] | None = None) -> str:
+    """Answer a freeform question using agent persona, current memory, and conversation history."""
     client = _setup_client()
 
-    # Extract just the Active Rules section from learnings for context efficiency
     rules_start = learnings.find("## Active Rules")
-    rules_end = learnings.find("## Mistake Log")
+    rules_end   = learnings.find("## Mistake Log")
     if rules_start != -1 and rules_end != -1:
         active_rules = learnings[rules_start:rules_end].strip()
     elif rules_start != -1:
@@ -338,9 +338,19 @@ def answer_question(question: str, soul: str, brain: str, learnings: str) -> str
     else:
         active_rules = learnings[:2000]
 
-    prompt = f"""You are a market intelligence agent answering a question from your operator.
+    # Format recent conversation so Sarah remembers context
+    history_block = ""
+    if history:
+        lines = []
+        for msg in history:
+            role = "User" if msg["role"] == "user" else "Sarah"
+            lines.append(f"{role}: {msg['content']}")
+        history_block = "\n--- RECENT CONVERSATION ---\n" + "\n".join(lines) + "\n--- END CONVERSATION ---\n"
+
+    prompt = f"""You are Sarah, a market intelligence agent answering a question from your operator.
 Answer in your own voice, grounded in your current market state and operating rules.
 Be direct, specific, and useful. No filler. No hedging.
+Use the conversation history to maintain context across follow-up messages.
 Use single *bold* for emphasis (Telegram markdown format — single asterisk only, never double).
 
 --- WHO YOU ARE (SOUL.md) ---
@@ -354,8 +364,8 @@ Use single *bold* for emphasis (Telegram markdown format — single asterisk onl
 --- YOUR ACTIVE RULES (from LEARNINGS.md) ---
 {active_rules}
 --- END RULES ---
-
-QUESTION: {question}
+{history_block}
+CURRENT QUESTION: {question}
 
 Answer:"""
 
