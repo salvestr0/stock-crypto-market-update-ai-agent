@@ -1,8 +1,51 @@
+import json
 import requests
+from datetime import datetime
+from pathlib import Path
+
 from config import CRYPTO_WATCHLIST
 
-COINGECKO_BASE = "https://api.coingecko.com/api/v3"
-HEADERS = {"accept": "application/json"}
+COINGECKO_BASE  = "https://api.coingecko.com/api/v3"
+HEADERS         = {"accept": "application/json"}
+_HISTORY_FILE   = Path(__file__).parent.parent / "narrative_history.json"
+_MAX_SNAPSHOTS  = 30  # days of history to keep per narrative
+
+
+# ---------------------------------------------------------------------------
+# Narrative lifecycle helpers
+# ---------------------------------------------------------------------------
+
+def _load_history() -> dict:
+    if _HISTORY_FILE.exists():
+        return json.loads(_HISTORY_FILE.read_text(encoding="utf-8"))
+    return {}
+
+
+def _save_history(data: dict) -> None:
+    _HISTORY_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _assess_phase(snapshots: list[dict]) -> str:
+    """Determine lifecycle phase from recent daily 24h-change snapshots."""
+    if len(snapshots) < 2:
+        return "EMERGING"
+
+    changes = [s["change_24h"] for s in snapshots[-7:]]
+    current = changes[-1]
+    prior   = changes[:-1]
+    avg     = sum(prior) / len(prior) if prior else 0
+
+    if current > 20 and avg < 3:
+        return "EARLY"          # sudden breakout, no prior momentum
+    if current > 5 and avg > 3:
+        return "HEATING_UP"     # sustained positive momentum
+    if avg > 10 and current < avg * 0.4:
+        return "COOLING"        # was hot, now decelerating sharply
+    if avg > 10 and current >= avg * 0.4:
+        return "PEAK"           # still elevated but plateauing
+    if avg < 0 and current < 0:
+        return "FADING"
+    return "NEUTRAL"
 
 
 def get_watchlist_data() -> list:
@@ -74,20 +117,37 @@ def get_global_market() -> dict:
 
 
 def get_top_categories() -> list:
-    """Fetch crypto categories ranked by 24h market cap change — reveals narrative flows."""
+    """Fetch crypto categories ranked by 24h market cap change, enriched with lifecycle phase."""
     url = f"{COINGECKO_BASE}/coins/categories"
     params = {"order": "market_cap_change_24h_desc"}
     response = requests.get(url, params=params, headers=HEADERS, timeout=15)
     response.raise_for_status()
     data = response.json()
 
-    result = []
+    history = _load_history()
+    today   = datetime.now().strftime("%Y-%m-%d")
+    result  = []
+
     for cat in data[:20]:
+        name       = cat.get("name", "")
+        change_24h = cat.get("market_cap_change_24h") or 0.0
+
+        # Update history — one snapshot per day
+        if name not in history:
+            history[name] = {"snapshots": []}
+        snaps = history[name]["snapshots"]
+        if not snaps or snaps[-1].get("date") != today:
+            snaps.append({"date": today, "change_24h": round(change_24h, 2)})
+            history[name]["snapshots"] = snaps[-_MAX_SNAPSHOTS:]
+
         result.append({
-            "name": cat.get("name"),
-            "market_cap_usd": cat.get("market_cap"),
-            "change_24h_pct": cat.get("market_cap_change_24h"),
-            "volume_24h_usd": cat.get("volume_24h"),
-            "top_3_coins": cat.get("top_3_coins", []),
+            "name":            name,
+            "market_cap_usd":  cat.get("market_cap"),
+            "change_24h_pct":  change_24h,
+            "volume_24h_usd":  cat.get("volume_24h"),
+            "top_3_coins":     cat.get("top_3_coins", []),
+            "lifecycle_phase": _assess_phase(history[name]["snapshots"]),
         })
+
+    _save_history(history)
     return result

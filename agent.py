@@ -30,37 +30,50 @@ Structure your response in EXACTLY two parts separated by the line ===STOCKS=== 
 PART 1 — Crypto (before ===STOCKS===):
 
 📊 MARKET SNAPSHOT
-2-3 sentences on overall market mood. Risk-on or risk-off? Dominant macro theme?
+2-3 sentences on overall market mood. Factor in DXY trend and yield curve status from the data.
 
 🪙 CRYPTO WATCHLIST
-For BTC, SOL, and HYPE — one line each: price, 24h change %, and one key insight about momentum, volume, or price structure.
+For BTC, SOL, and HYPE — one line each: price, 24h change %, and one key insight.
+
+🔮 DERIVATIVES SIGNALS
+- BTC funding rate: [positive = longs paying = leveraged longs, negative = shorts paying]
+- BTC put/call ratio: [> 1.0 = hedging/bearish tilt, < 0.7 = bullish, ~1.0 = neutral]
+- BTC basis: [positive = contango/bullish, negative = backwardation/bearish]
+- ETH funding rate and OI context
+One line summary of what derivatives are signalling about near-term direction.
 
 🔥 CRYPTO NARRATIVES — WHAT'S TRENDING
-2-3 narratives/sectors seeing the most capital inflow (AI tokens, DeFi, L2s, memecoins, RWA, GameFi, etc.) with specific coins and brief reasoning.
+2-3 narratives seeing capital inflow. Use the lifecycle_phase field — flag which are EARLY (opportunity) vs PEAK (crowded) vs COOLING (exit watch).
 
 💤 CRYPTO — WHAT'S BEING OVERLOOKED
-Narratives, sectors, or coins that look quietly strong vs. current attention. Potential setups before the crowd notices.
+Narratives/coins with EMERGING or NEUTRAL lifecycle phase that look quietly strong. Setups before the crowd arrives.
 
 ===STOCKS===
 
 PART 2 — Stocks (after ===STOCKS===):
 
+🌐 MACRO CONTEXT
+- DXY: [level + trend + one-line crypto/risk implication]
+- Yield curve: [spread, status (INVERTED/FLAT/NORMAL), and what it means for risk appetite]
+
 📈 STOCKS — SECTOR ROTATION
-Top 3 and bottom 3 sectors by today's performance. Where is institutional money flowing? What is being sold?
+Top 3 and bottom 3 sectors by today's performance. Where is institutional money flowing?
 
 🔍 STOCKS — TRENDS & HIDDEN MOVES
-Trending: Hot themes right now (AI, defense, energy, biotech, etc.)
-Overlooked: Sectors quietly accumulating or setting up for a breakout.
+Trending themes. Overlooked setups.
+
+📅 UPCOMING CATALYSTS
+List the next 3-5 high-impact economic events from the calendar data (date, name, why it matters). Skip if no events in data.
 
 ⚡ TODAY'S ACTION ITEMS
-3-5 specific, actionable bullet points — what to watch, research, or consider positioning on across both crypto and stocks.
+3-5 specific, actionable bullet points across crypto and stocks.
 
 Rules:
 - Output the separator line ===STOCKS=== exactly as shown — nothing before or after it on that line.
 - Be direct and specific. No generic filler.
-- If a market is closed or data is missing, skip it cleanly.
+- If a data field is missing or null, skip that line cleanly.
 - Use plain text with section headers exactly as shown. No markdown tables.
-- Keep each part under 300 words.
+- Keep each part under 350 words.
 - Formatting: use *word* for bold (single asterisk). Use - for bullet points. NEVER use * as a bullet character.
 """
 

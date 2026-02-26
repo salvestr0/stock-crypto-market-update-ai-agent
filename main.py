@@ -9,6 +9,9 @@ from fetchers.crypto import (
     get_top_categories,
 )
 from fetchers.stocks import get_indices_data, get_sector_performance
+from fetchers.macro import get_dxy, get_yield_curve
+from fetchers.derivatives import get_crypto_derivatives
+from fetchers.calendar import get_upcoming_events
 from agent import generate_market_update
 from grok_agent import get_x_social_pulse
 from telegram_bot import send_message
@@ -28,18 +31,22 @@ def _safe_fetch(label: str, fn, fallback):
 def build_crypto_payload() -> dict:
     print("\nFetching crypto data...")
     return {
-        "watchlist": _safe_fetch("Watchlist prices (BTC/SOL/HYPE)", get_watchlist_data, []),
-        "trending_coins": _safe_fetch("Trending coins", get_trending_coins, []),
-        "global_market": _safe_fetch("Global market stats", get_global_market, {}),
-        "categories_by_performance": _safe_fetch("Category narratives", get_top_categories, []),
+        "watchlist":              _safe_fetch("Watchlist prices (BTC/SOL/HYPE)", get_watchlist_data, []),
+        "trending_coins":         _safe_fetch("Trending coins", get_trending_coins, []),
+        "global_market":          _safe_fetch("Global market stats", get_global_market, {}),
+        "categories_by_performance": _safe_fetch("Category narratives + lifecycle", get_top_categories, []),
+        "derivatives":            _safe_fetch("Crypto derivatives (Binance+Deribit)", get_crypto_derivatives, {}),
     }
 
 
 def build_stock_payload() -> dict:
-    print("\nFetching stock data...")
+    print("\nFetching stock + macro data...")
     return {
-        "major_indices": _safe_fetch("Major indices", get_indices_data, {}),
-        "sector_etfs": _safe_fetch("Sector ETFs", get_sector_performance, {}),
+        "major_indices":   _safe_fetch("Major indices", get_indices_data, {}),
+        "sector_etfs":     _safe_fetch("Sector ETFs", get_sector_performance, {}),
+        "dxy":             _safe_fetch("DXY", get_dxy, {}),
+        "yield_curve":     _safe_fetch("Yield curve (FRED)", get_yield_curve, {}),
+        "upcoming_events": _safe_fetch("Economic calendar", get_upcoming_events, []),
     }
 
 
