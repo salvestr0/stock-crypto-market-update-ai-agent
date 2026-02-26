@@ -6,7 +6,6 @@ import os
 import re
 import time
 import threading
-from collections import deque
 from datetime import datetime
 
 # Load env before any os.getenv calls
@@ -19,25 +18,12 @@ from main import build_crypto_payload, build_stock_payload
 from agent import generate_market_update, generate_brain_update, generate_self_review, answer_question, generate_auto_correction
 from grok_agent import get_x_social_pulse
 from telegram_bot import send_message, get_updates, send_reply, send_photo
-from memory import read_file, write_brain, log_review, log_learning
+from memory import read_file, write_brain, log_review, log_learning, load_conversation, save_message
 from chart import get_crypto_chart, get_stock_chart
 
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 UPDATE_TIME = os.getenv("DAILY_UPDATE_TIME", "07:00")
 
-# Per-chat conversation history — keeps last 10 messages (5 exchanges)
-_HISTORY: dict[str, deque] = {}
-_MAX_HISTORY = 10
-
-
-def _history_add(chat_id: str, role: str, content: str) -> None:
-    if chat_id not in _HISTORY:
-        _HISTORY[chat_id] = deque(maxlen=_MAX_HISTORY)
-    _HISTORY[chat_id].append({"role": role, "content": content})
-
-
-def _history_get(chat_id: str) -> list[dict]:
-    return list(_HISTORY.get(chat_id, []))
 
 
 # ---------------------------------------------------------------------------
@@ -230,16 +216,16 @@ def _handle_chart_request(chat_id: str, symbol: str, interval: str):
 # ---------------------------------------------------------------------------
 
 def _handle_ask(chat_id: str, question: str):
-    """Answer a freeform question using agent context and conversation history."""
+    """Answer a freeform question using agent context and persistent conversation history."""
     try:
         soul      = read_file("SOUL.md")
         brain     = read_file("BRAIN.md")
         learnings = read_file("LEARNINGS.md")
-        history   = _history_get(chat_id)
+        history   = load_conversation(chat_id)
 
-        _history_add(chat_id, "user", question)
+        save_message(chat_id, "user", question)
         answer = answer_question(question, soul, brain, learnings, history)
-        _history_add(chat_id, "assistant", answer)
+        save_message(chat_id, "assistant", answer)
 
         send_reply(chat_id, answer)
     except Exception as e:

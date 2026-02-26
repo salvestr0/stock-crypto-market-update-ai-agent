@@ -1,7 +1,13 @@
 """File I/O layer for all .md memory files. No AI logic here."""
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
+
+_CONV_FILE      = BASE_DIR / "conversation_history.json"
+_MAX_STORED     = 80   # messages kept on disk per chat
+_MAX_IN_PROMPT  = 20   # messages passed into the AI prompt (keeps tokens manageable)
 
 
 def read_file(name: str) -> str:
@@ -26,6 +32,48 @@ def log_learning(title: str, entry: str) -> None:
     """Prepend a mistake/learning entry to LEARNINGS.md after the log marker."""
     formatted = f"### {title}\n\n{entry}"
     _prepend_to_log("LEARNINGS.md", "<!-- Most recent first -->", formatted)
+
+
+def load_conversation(chat_id: str) -> list[dict]:
+    """Load persisted conversation history for a chat_id.
+    Returns the last _MAX_IN_PROMPT messages for use in the AI prompt.
+    """
+    if not _CONV_FILE.exists():
+        return []
+    try:
+        data = json.loads(_CONV_FILE.read_text(encoding="utf-8"))
+        messages = data.get(str(chat_id), [])
+        return messages[-_MAX_IN_PROMPT:]
+    except (json.JSONDecodeError, Exception):
+        return []
+
+
+def save_message(chat_id: str, role: str, content: str) -> None:
+    """Append a single message to the persisted conversation history."""
+    try:
+        data = {}
+        if _CONV_FILE.exists():
+            try:
+                data = json.loads(_CONV_FILE.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, Exception):
+                data = {}
+
+        key = str(chat_id)
+        if key not in data:
+            data[key] = []
+
+        data[key].append({
+            "role":      role,
+            "content":   content,
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        })
+
+        # Trim to max stored length
+        data[key] = data[key][-_MAX_STORED:]
+
+        _CONV_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass  # Never let a save failure break the conversation
 
 
 def _prepend_to_log(filename: str, marker: str, entry: str) -> None:
