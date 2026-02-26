@@ -1,7 +1,7 @@
 import os
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from google import genai
 from config import GEMINI_MODEL
 
@@ -347,11 +347,16 @@ def answer_question(question: str, soul: str, brain: str, learnings: str,
             lines.append(f"{role}: {msg['content']}")
         history_block = "\n--- RECENT CONVERSATION ---\n" + "\n".join(lines) + "\n--- END CONVERSATION ---\n"
 
+    current_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
     prompt = f"""You are Sarah, a market intelligence agent answering a question from your operator.
 Answer in your own voice, grounded in your current market state and operating rules.
 Be direct, specific, and useful. No filler. No hedging.
 Use the conversation history to maintain context across follow-up messages.
 Use single *bold* for emphasis (Telegram markdown format — single asterisk only, never double).
+
+CURRENT TIME: {current_utc}
+(Use this for any time-related questions. Do NOT use the Last Updated field in BRAIN.md as a proxy for the current time.)
 
 --- WHO YOU ARE (SOUL.md) ---
 {soul}
