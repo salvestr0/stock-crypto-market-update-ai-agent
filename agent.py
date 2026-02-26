@@ -167,6 +167,100 @@ Output only the JSON array, nothing else. No prose before or after it.
     return []
 
 
+def generate_rule_promotion(corrections: list[dict], current_rules: str) -> str:
+    """Given new corrections, return an updated Active Rules section for LEARNINGS.md.
+
+    Returns the full replacement text starting with the heading line.
+    """
+    client = _setup_client()
+
+    corrections_text = "\n\n".join(
+        f"- Title: {c.get('title', '')}\n"
+        f"  What I said: {c.get('what_i_said', '')}\n"
+        f"  What happened: {c.get('what_happened', '')}\n"
+        f"  Root cause: {c.get('root_cause', '')}\n"
+        f"  Rule update: {c.get('rule_update', '')}\n"
+        f"  Category: {c.get('category', '')}"
+        for c in corrections
+    )
+
+    prompt = f"""You are Sarah, a self-improving market agent updating your own trading rules after catching yourself making mistakes.
+
+Below are the corrections from today's run — hypotheses that were clearly invalidated by the market:
+
+--- NEW CORRECTIONS ---
+{corrections_text}
+--- END CORRECTIONS ---
+
+Below is your CURRENT Active Rules section from LEARNINGS.md:
+
+--- CURRENT ACTIVE RULES ---
+{current_rules}
+--- END CURRENT RULES ---
+
+Your task: output an updated Active Rules section that incorporates the new learnings.
+
+Rules for updating:
+1. If a correction directly contradicts an existing rule — refine or replace that rule in-place (keep the same Rn number if possible).
+2. If a correction reveals a clear gap — add a new numbered rule under the most relevant section.
+3. Keep all existing rules that are still valid — do not delete without cause.
+4. Add at most 2 new rules per correction cycle. Quality over quantity.
+5. Preserve all existing section headings (### On Narratives, ### On Price Structure, etc.)
+6. Add a new section heading only if a genuinely new domain is needed.
+
+Output ONLY the updated Active Rules section starting with this exact heading line:
+## Active Rules (Current Best Version)
+
+No preamble, no explanation, no trailing separator line."""
+
+    response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+    return response.text.strip()
+
+
+def generate_soul_refinement(soul: str, learnings: str, recent_reviews: str) -> str:
+    """Generate a refined SOUL.md based on accumulated learnings and self-reviews.
+
+    Returns the complete new SOUL.md content.
+    """
+    client = _setup_client()
+
+    # Active rules + mistake log only (skip graduated rules to save tokens)
+    graduated_idx = learnings.find("## Graduated Rules")
+    learnings_context = learnings[:graduated_idx].strip() if graduated_idx != -1 else learnings[:3000]
+
+    # Last ~2000 chars of reviews is enough context
+    reviews_context = recent_reviews[-2000:] if len(recent_reviews) > 2000 else recent_reviews
+
+    prompt = f"""You are Sarah, refining your own identity and principles after accumulating significant learnings from multiple market correction cycles.
+
+--- CURRENT SOUL.md ---
+{soul}
+--- END SOUL ---
+
+--- LEARNINGS (Active Rules + Mistake Log) ---
+{learnings_context}
+--- END LEARNINGS ---
+
+--- RECENT SELF-REVIEWS (excerpt) ---
+{reviews_context}
+--- END REVIEWS ---
+
+Your task: output a refined SOUL.md that sharpens your identity based on what you've learned.
+
+Rules for refinement:
+1. Preserve the exact markdown structure and all section headings exactly as they appear.
+2. Deepen principles that your mistake history has validated — make them more specific and concrete where the data supports it.
+3. Add at most 2-3 new sentences total across the entire document.
+4. Remove or revise anything your mistakes have shown to be overconfident or wrong.
+5. Do NOT change your name, core identity, or dramatically rewrite any section — this is a refinement, not a reset.
+6. Your voice stays the same: sharp, direct, no filler.
+
+Output ONLY the complete refined SOUL.md, starting with: # SOUL.md — Who I Am"""
+
+    response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+    return response.text.strip()
+
+
 def generate_brain_update(crypto_data: dict, stock_data: dict, analysis: str) -> str:
     """Generate a fully populated BRAIN.md based on current run data. Returns entire file content."""
     client = _setup_client()

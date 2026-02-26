@@ -15,10 +15,15 @@ load_dotenv()
 import schedule
 
 from main import build_crypto_payload, build_stock_payload
-from agent import generate_market_update, generate_brain_update, generate_self_review, answer_question, generate_auto_correction
+from agent import (generate_market_update, generate_brain_update, generate_self_review,
+                   answer_question, generate_auto_correction,
+                   generate_rule_promotion, generate_soul_refinement)
 from grok_agent import get_x_social_pulse
 from telegram_bot import send_message, get_updates, send_reply, send_photo
-from memory import read_file, write_brain, log_review, log_learning, load_conversation, save_message
+from memory import (read_file, write_brain, log_review, log_learning,
+                    load_conversation, save_message,
+                    update_active_rules, update_soul,
+                    record_soul_correction, should_update_soul, mark_soul_updated)
 from chart import get_crypto_chart, get_stock_chart
 
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
@@ -61,10 +66,46 @@ def run_full_update():
 
                 summary_lines = "\n".join(f"- {c.get('title', '')}" for c in corrections)
                 send_message(f"🧠 *Sarah self-corrected {len(corrections)} hypothesis(es):*\n{summary_lines}")
+
+                # Rule promotion: update Active Rules in LEARNINGS.md
+                print("  Promoting rules from corrections...")
+                try:
+                    current_learnings = read_file("LEARNINGS.md")
+                    rules_start = current_learnings.find("## Active Rules (Current Best Version)")
+                    rules_end   = current_learnings.find("## Mistake Log")
+                    if rules_start != -1 and rules_end != -1:
+                        current_rules = current_learnings[rules_start:rules_end].strip()
+                    else:
+                        current_rules = ""
+                    new_rules = generate_rule_promotion(corrections, current_rules)
+                    update_active_rules(new_rules)
+                    print("  ✓ Active Rules updated in LEARNINGS.md")
+                    send_message("📋 *Sarah updated her Active Rules* based on today's corrections.")
+                except Exception as e:
+                    print(f"  ✗ Rule promotion failed: {e}")
+
+                # Track each correction toward the soul-update threshold
+                for _ in corrections:
+                    record_soul_correction()
             else:
                 print("  ✓ No corrections needed")
         except Exception as e:
             print(f"  ✗ Auto-correction check failed: {e}")
+
+        # Soul refinement: check if threshold met (5+ corrections across runs, 3+ days)
+        try:
+            if should_update_soul():
+                print("  Refining SOUL.md...")
+                soul    = read_file("SOUL.md")
+                learnings = read_file("LEARNINGS.md")
+                reviews = read_file("SELF-REVIEW.md")
+                new_soul = generate_soul_refinement(soul, learnings, reviews)
+                update_soul(new_soul)
+                mark_soul_updated()
+                print("  ✓ SOUL.md refined")
+                send_message("🌱 *Sarah has refined her SOUL.md* — principles updated from accumulated learnings.")
+        except Exception as e:
+            print(f"  ✗ Soul refinement failed: {e}")
 
         print("  Generating analysis with Gemini...")
         crypto_analysis, stock_analysis = generate_market_update(crypto_data, stock_data)
