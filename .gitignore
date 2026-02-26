@@ -16,6 +16,12 @@ test_*.png
 # pip artifacts
 =*
 
+# Claude internal
+.claude/
+
+# Runtime data (grows every run — not tracked in git)
+narrative_history.json
+
 # OS
 .DS_Store
 Thumbs.db
