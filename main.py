@@ -12,6 +12,8 @@ from fetchers.stocks import get_indices_data, get_sector_performance
 from fetchers.macro import get_dxy, get_yield_curve
 from fetchers.derivatives import get_crypto_derivatives
 from fetchers.calendar import get_upcoming_events
+from fetchers.defillama import get_protocol_tvl, get_chain_tvl, get_stablecoin_supply
+from fetchers.github import get_developer_activity
 from agent import generate_market_update
 from grok_agent import get_x_social_pulse
 from telegram_bot import send_message
@@ -30,12 +32,20 @@ def _safe_fetch(label: str, fn, fallback):
 
 def build_crypto_payload() -> dict:
     print("\nFetching crypto data...")
+    # Fetch categories first — names feed into GitHub auto-selection
+    categories = _safe_fetch("Category narratives + lifecycle", get_top_categories, [])
+    narrative_names = [c["name"] for c in categories[:10]]
+
     return {
-        "watchlist":              _safe_fetch("Watchlist prices (BTC/SOL/HYPE)", get_watchlist_data, []),
-        "trending_coins":         _safe_fetch("Trending coins", get_trending_coins, []),
-        "global_market":          _safe_fetch("Global market stats", get_global_market, {}),
-        "categories_by_performance": _safe_fetch("Category narratives + lifecycle", get_top_categories, []),
-        "derivatives":            _safe_fetch("Crypto derivatives (Binance+Deribit)", get_crypto_derivatives, {}),
+        "watchlist":                 _safe_fetch("Watchlist prices (BTC/SOL/HYPE)", get_watchlist_data, []),
+        "trending_coins":            _safe_fetch("Trending coins", get_trending_coins, []),
+        "global_market":             _safe_fetch("Global market stats", get_global_market, {}),
+        "categories_by_performance": categories,
+        "derivatives":               _safe_fetch("Crypto derivatives (Binance+Deribit)", get_crypto_derivatives, {}),
+        "defi_protocol_tvl":         _safe_fetch("DeFiLlama protocol TVL", get_protocol_tvl, []),
+        "chain_tvl":                 _safe_fetch("DeFiLlama chain TVL", get_chain_tvl, []),
+        "stablecoin_supply":         _safe_fetch("Stablecoin supply", get_stablecoin_supply, {}),
+        "developer_activity":        _safe_fetch("GitHub dev activity", lambda: get_developer_activity(narrative_names), []),
     }
 
 

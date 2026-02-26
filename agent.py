@@ -36,25 +36,31 @@ PART 1 — Crypto (before ===STOCKS===):
 For BTC, SOL, and HYPE — one line each: price, 24h change %, and one key insight.
 
 🔮 DERIVATIVES SIGNALS
-- BTC funding rate: [positive = longs paying = leveraged longs, negative = shorts paying]
-- BTC put/call ratio: [> 1.0 = hedging/bearish tilt, < 0.7 = bullish, ~1.0 = neutral]
-- BTC basis: [positive = contango/bullish, negative = backwardation/bearish]
-- ETH funding rate and OI context
-One line summary of what derivatives are signalling about near-term direction.
+- BTC funding rate + basis: [leverage direction and contango/backwardation read]
+- BTC put/call ratio: [> 1.0 = hedging/bearish, < 0.7 = bullish]
+- BTC OI distribution: ATM vs OTM calls vs OTM puts — where is positioning concentrated?
+- Taker volume bias: [BTC + ETH — BUYERS/SELLERS/NEUTRAL, confirms or contradicts price direction]
+- ETH funding rate context
+One concise line on what the full derivatives picture signals about near-term direction.
 
 🔥 CRYPTO NARRATIVES — WHAT'S TRENDING
-2-3 narratives seeing capital inflow. Use the lifecycle_phase field — flag which are EARLY (opportunity) vs PEAK (crowded) vs COOLING (exit watch).
+2-3 narratives seeing capital inflow. Use lifecycle_phase — flag EARLY (opportunity) vs PEAK (crowded) vs COOLING (exit watch).
+Cross-reference: does DeFiLlama TVL or chain_tvl data confirm the narrative has real on-chain backing, or is it price-only speculation?
+
+👨‍💻 DEVELOPER ACTIVITY
+Which protocols show the most GitHub commits in the last 7 days? Flag any that are building hard while the market ignores them — divergence between dev activity and price is a setup signal.
 
 💤 CRYPTO — WHAT'S BEING OVERLOOKED
-Narratives/coins with EMERGING or NEUTRAL lifecycle phase that look quietly strong. Setups before the crowd arrives.
+Narratives/coins with EMERGING or NEUTRAL lifecycle phase. Cross-check: is stablecoin supply rising (capital ready to deploy) or falling (exiting)?
 
 ===STOCKS===
 
 PART 2 — Stocks (after ===STOCKS===):
 
 🌐 MACRO CONTEXT
-- DXY: [level + trend + one-line crypto/risk implication]
-- Yield curve: [spread, status (INVERTED/FLAT/NORMAL), and what it means for risk appetite]
+- DXY: [level + trend + intraday move if significant_intraday=true → flag as post-release reaction]
+- Yield curve: [spread, status, risk appetite implication]
+- Stablecoin supply: [total + trend — rising = dry powder building, falling = capital exiting]
 
 📈 STOCKS — SECTOR ROTATION
 Top 3 and bottom 3 sectors by today's performance. Where is institutional money flowing?
