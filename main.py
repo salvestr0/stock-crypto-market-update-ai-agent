@@ -2,6 +2,9 @@ import sys
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Load env before any module-level os.getenv() calls in fetchers/agent
+load_dotenv()
+
 from fetchers.crypto import (
     get_watchlist_data,
     get_trending_coins,
@@ -61,8 +64,6 @@ def build_stock_payload() -> dict:
 
 
 def main():
-    load_dotenv()
-
     date_str = datetime.now().strftime("%A, %B %d %Y")
     print(f"\n{'='*50}")
     print(f"  Market Update Agent — {date_str}")

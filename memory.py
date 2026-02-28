@@ -1,21 +1,33 @@
 """File I/O layer for all .md memory files. No AI logic here."""
 import json
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-BASE_DIR = Path(__file__).parent
+BASE_DIR = Path(__file__).parent.resolve()
 
 _CONV_FILE      = BASE_DIR / "conversation_history.json"
 _SOUL_TRACKER   = BASE_DIR / "soul_tracker.json"
-_MAX_STORED     = 80   # messages kept on disk per chat
-_MAX_IN_PROMPT  = 20   # messages passed into the AI prompt (keeps tokens manageable)
+_MAX_STORED     = 80    # messages kept on disk per chat
+_MAX_IN_PROMPT  = 20    # messages passed into the AI prompt (keeps tokens manageable)
+_MAX_MSG_CHARS  = 4000  # per-message content cap (prevents file bloat)
 _SOUL_CORRECTION_THRESHOLD = 5   # corrections before SOUL.md refinement triggers
 _SOUL_DAY_THRESHOLD        = 3   # minimum days between soul updates
+
+_conv_lock = threading.Lock()   # guards all reads/writes to conversation_history.json
+
+
+def _safe_path(name: str) -> Path:
+    """Resolve name relative to BASE_DIR and raise if it escapes the project root."""
+    resolved = (BASE_DIR / name).resolve()
+    if not resolved.is_relative_to(BASE_DIR):
+        raise ValueError(f"Path traversal blocked: {name!r}")
+    return resolved
 
 
 def read_file(name: str) -> str:
     """Read a .md file from the project directory. Returns empty string if missing."""
-    path = BASE_DIR / name
+    path = _safe_path(name)
     if not path.exists():
         return ""
     return path.read_text(encoding="utf-8")
@@ -23,7 +35,7 @@ def read_file(name: str) -> str:
 
 def write_brain(content: str) -> None:
     """Overwrite BRAIN.md entirely — it's live state, not a log."""
-    (BASE_DIR / "BRAIN.md").write_text(content, encoding="utf-8")
+    _safe_path("BRAIN.md").write_text(content, encoding="utf-8")
 
 
 def log_review(entry: str) -> None:
@@ -41,40 +53,45 @@ def load_conversation(chat_id: str) -> list[dict]:
     """Load persisted conversation history for a chat_id.
     Returns the last _MAX_IN_PROMPT messages for use in the AI prompt.
     """
-    if not _CONV_FILE.exists():
-        return []
-    try:
-        data = json.loads(_CONV_FILE.read_text(encoding="utf-8"))
-        messages = data.get(str(chat_id), [])
-        return messages[-_MAX_IN_PROMPT:]
-    except (json.JSONDecodeError, Exception):
-        return []
+    with _conv_lock:
+        if not _CONV_FILE.exists():
+            return []
+        try:
+            data = json.loads(_CONV_FILE.read_text(encoding="utf-8"))
+            messages = data.get(str(chat_id), [])
+            return messages[-_MAX_IN_PROMPT:]
+        except (json.JSONDecodeError, Exception):
+            return []
 
 
 def save_message(chat_id: str, role: str, content: str) -> None:
     """Append a single message to the persisted conversation history."""
     try:
-        data = {}
-        if _CONV_FILE.exists():
-            try:
-                data = json.loads(_CONV_FILE.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, Exception):
-                data = {}
+        with _conv_lock:
+            data = {}
+            if _CONV_FILE.exists():
+                try:
+                    data = json.loads(_CONV_FILE.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, Exception):
+                    data = {}
 
-        key = str(chat_id)
-        if key not in data:
-            data[key] = []
+            key = str(chat_id)
+            if key not in data:
+                data[key] = []
 
-        data[key].append({
-            "role":      role,
-            "content":   content,
-            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        })
+            data[key].append({
+                "role":      role,
+                "content":   content[:_MAX_MSG_CHARS],  # cap individual message size
+                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            })
 
-        # Trim to max stored length
-        data[key] = data[key][-_MAX_STORED:]
+            # Trim to max stored length
+            data[key] = data[key][-_MAX_STORED:]
 
-        _CONV_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            # Atomic write: write to temp then rename
+            tmp = _CONV_FILE.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(_CONV_FILE)
     except Exception:
         pass  # Never let a save failure break the conversation
 
@@ -85,7 +102,7 @@ def update_active_rules(new_rules_section: str) -> None:
     new_rules_section should start with '## Active Rules (Current Best Version)'
     and contain all rules. The trailing '---' separator is added automatically.
     """
-    path = BASE_DIR / "LEARNINGS.md"
+    path = _safe_path("LEARNINGS.md")
     content = path.read_text(encoding="utf-8")
 
     start_marker = "## Active Rules (Current Best Version)"
@@ -108,7 +125,7 @@ def update_active_rules(new_rules_section: str) -> None:
 
 def update_soul(new_content: str) -> None:
     """Overwrite SOUL.md with refined content."""
-    (BASE_DIR / "SOUL.md").write_text(new_content.rstrip() + "\n", encoding="utf-8")
+    _safe_path("SOUL.md").write_text(new_content.rstrip() + "\n", encoding="utf-8")
 
 
 def record_soul_correction() -> None:
@@ -131,11 +148,9 @@ def should_update_soul() -> bool:
         last_str = data.get("last_update_date", "")
         if last_str:
             last = datetime.fromisoformat(last_str)
-            # Make offset-naive for comparison if needed
             if last.tzinfo is None:
                 last = last.replace(tzinfo=timezone.utc)
-            days_elapsed = (datetime.now(timezone.utc) - last).days
-            if days_elapsed < _SOUL_DAY_THRESHOLD:
+            if (datetime.now(timezone.utc) - last).days < _SOUL_DAY_THRESHOLD:
                 return False
         return True
     except Exception:
@@ -164,7 +179,7 @@ def _load_soul_tracker() -> dict:
 
 def _prepend_to_log(filename: str, marker: str, entry: str) -> None:
     """Find marker comment in file and insert entry immediately after it."""
-    path = BASE_DIR / filename
+    path = _safe_path(filename)
     content = path.read_text(encoding="utf-8")
 
     idx = content.find(marker)

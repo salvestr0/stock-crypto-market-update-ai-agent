@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import requests
 
 TELEGRAM_API = "https://api.telegram.org"
@@ -37,6 +38,16 @@ def _to_telegram_markdown(text: str) -> str:
     return text
 
 
+def _post_with_retry(url: str, timeout: int = 15, **kwargs) -> requests.Response:
+    """POST with automatic back-off on 429 (Too Many Requests)."""
+    response = requests.post(url, timeout=timeout, **kwargs)
+    if response.status_code == 429:
+        retry_after = int(response.headers.get("Retry-After", 5))
+        time.sleep(retry_after)
+        response = requests.post(url, timeout=timeout, **kwargs)
+    return response
+
+
 def get_updates(offset: int) -> list:
     """Long-poll Telegram for new updates. Returns list of update dicts, empty list on error."""
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -67,13 +78,15 @@ def send_reply(chat_id: str, text: str) -> None:
     url = f"{TELEGRAM_API}/bot{bot_token}/sendMessage"
     chunks = _split_message(text)
 
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
+        if i > 0:
+            time.sleep(0.1)  # avoid rate limiting on multi-chunk messages
         payload = {"chat_id": chat_id, "text": chunk, "parse_mode": "Markdown"}
-        response = requests.post(url, json=payload, timeout=15)
+        response = _post_with_retry(url, json=payload)
 
         if not response.ok:
             payload.pop("parse_mode")
-            response = requests.post(url, json=payload, timeout=15)
+            response = _post_with_retry(url, json=payload)
             response.raise_for_status()
 
 
@@ -89,11 +102,11 @@ def send_photo(chat_id: str, image_bytes: bytes, caption: str = "") -> None:
     files = {"photo": ("chart.png", image_bytes, "image/png")}
     data = {"chat_id": chat_id, "caption": caption, "parse_mode": "Markdown"}
 
-    response = requests.post(url, data=data, files=files, timeout=30)
+    response = _post_with_retry(url, timeout=30, data=data, files=files)
     if not response.ok:
         # Retry without Markdown if parse failed
         data.pop("parse_mode")
-        response = requests.post(url, data=data, files=files, timeout=30)
+        response = _post_with_retry(url, timeout=30, data=data, files=files)
         response.raise_for_status()
 
 
@@ -111,13 +124,15 @@ def send_message(text: str) -> None:
     url = f"{TELEGRAM_API}/bot{bot_token}/sendMessage"
     chunks = _split_message(text)
 
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
+        if i > 0:
+            time.sleep(0.1)
         # Try Markdown first, fall back to plain text if parsing fails
         payload = {"chat_id": chat_id, "text": chunk, "parse_mode": "Markdown"}
-        response = requests.post(url, json=payload, timeout=15)
+        response = _post_with_retry(url, json=payload)
 
         if not response.ok:
             # Telegram rejected the markdown — retry as plain text
             payload.pop("parse_mode")
-            response = requests.post(url, json=payload, timeout=15)
+            response = _post_with_retry(url, json=payload)
             response.raise_for_status()

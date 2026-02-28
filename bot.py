@@ -27,7 +27,13 @@ from memory import (read_file, write_brain, log_review, log_learning,
 from chart import get_crypto_chart, get_stock_chart
 
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+if not CHAT_ID:
+    raise RuntimeError("TELEGRAM_CHAT_ID must be set in .env — cannot start without it")
+
 UPDATE_TIME = os.getenv("DAILY_UPDATE_TIME", "07:00")
+if not re.fullmatch(r"\d{2}:\d{2}", UPDATE_TIME):
+    print(f"[WARNING] Invalid DAILY_UPDATE_TIME '{UPDATE_TIME}' — defaulting to 07:00")
+    UPDATE_TIME = "07:00"
 
 
 
@@ -139,7 +145,7 @@ def run_full_update():
     except Exception as e:
         print(f"  ✗ run_full_update failed: {e}")
         try:
-            send_message(f"⚠️ Full update failed: {e}")
+            send_message("⚠️ Full update failed. Check server logs.")
         except Exception:
             pass
 
@@ -270,7 +276,8 @@ def _handle_ask(chat_id: str, question: str):
 
         send_reply(chat_id, answer)
     except Exception as e:
-        send_reply(chat_id, f"⚠️ Error answering question: {e}")
+        print(f"  ✗ _handle_ask error: {e}")
+        send_reply(chat_id, "⚠️ Something went wrong. Try again.")
 
 
 def handle_message(chat_id: str, text: str):
@@ -330,6 +337,9 @@ def handle_message(chat_id: str, text: str):
             send_reply(chat_id, "Usage: /chart <SYMBOL> [interval]\nExample: /chart BTC 4h")
             return
         symbol = parts[0].lstrip("$").upper()
+        if not re.fullmatch(r"[A-Z0-9]{1,10}", symbol):
+            send_reply(chat_id, "❌ Invalid symbol. Use letters/numbers only, e.g. /chart BTC")
+            return
         interval = _TIMEFRAME_MAP.get(parts[1].lower(), "1h") if len(parts) > 1 else "1h"
         _handle_chart_request(chat_id, symbol, interval)
 
@@ -390,7 +400,14 @@ def _scheduler_thread():
     print(f"[Scheduler] Daily update at {UPDATE_TIME} | Self-review every 4h")
 
     while True:
-        schedule.run_pending()
+        try:
+            schedule.run_pending()
+        except Exception as e:
+            print(f"[Scheduler] Job crashed: {e}")
+            try:
+                send_message("⚠️ Scheduled job crashed. Check server logs.")
+            except Exception:
+                pass
         time.sleep(30)
 
 

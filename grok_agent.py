@@ -48,5 +48,6 @@ Rules:
     response = client.chat.completions.create(
         model=GROK_MODEL,
         messages=[{"role": "user", "content": prompt}],
+        timeout=60,
     )
     return response.choices[0].message.content

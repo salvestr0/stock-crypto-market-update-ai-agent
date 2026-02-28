@@ -1,6 +1,7 @@
 """Economic calendar — Forex Factory public JSON (this week + next week).
 FRED API key is used for yield curve in macro.py; FF provides the forward-looking calendar.
 """
+import re
 import requests
 from datetime import datetime, date
 
@@ -12,6 +13,16 @@ _WANTED_COUNTRY = "USD"
 
 # UTC offset → timezone label (US economic data is always Eastern Time)
 _OFFSET_LABEL = {-5: "ET", -4: "ET", -6: "CT", -7: "MT", -8: "PT"}
+
+
+def _sanitize_field(val: object, max_len: int = 200) -> str:
+    """Sanitize a string field from untrusted external JSON.
+    Strips newlines (prompt injection vector) and caps length.
+    """
+    if not isinstance(val, str):
+        return ""
+    val = re.sub(r'[\r\n]+', ' ', val).strip()
+    return val[:max_len]
 
 
 def _parse_ff_event(raw: str) -> tuple[date | None, str | None, str | None]:
@@ -81,10 +92,10 @@ def get_upcoming_events() -> list[dict]:
             "time":       ev_time,      # e.g. "8:30 AM"
             "timezone":   ev_tz,        # e.g. "ET"
             "days_until": days_until,
-            "name":       ev.get("title", "Unknown"),
-            "impact":     ev.get("impact", ""),
-            "forecast":   ev.get("forecast", ""),
-            "previous":   ev.get("previous", ""),
+            "name":       _sanitize_field(ev.get("title", "Unknown")),
+            "impact":     _sanitize_field(ev.get("impact", ""), max_len=20),
+            "forecast":   _sanitize_field(ev.get("forecast", ""), max_len=50),
+            "previous":   _sanitize_field(ev.get("previous", ""), max_len=50),
         })
 
     # Deduplicate and sort

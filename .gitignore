@@ -22,6 +22,7 @@ test_*.png
 # Runtime data (grows every run — not tracked in git)
 narrative_history.json
 conversation_history.json
+soul_tracker.json
 
 # OS
 .DS_Store
